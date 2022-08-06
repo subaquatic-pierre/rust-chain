@@ -2,7 +2,7 @@ use hex_fmt::HexFmt;
 use serde::Serialize;
 use sha2::{Digest, Sha256};
 
-use super::{data::TransferData, transaction::Transaction};
+use super::transaction::Transaction;
 
 pub struct Hasher {}
 

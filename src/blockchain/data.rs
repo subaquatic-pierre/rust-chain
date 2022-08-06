@@ -1,11 +1,11 @@
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Deserialize, Serialize, Debug)]
-pub struct TransferData {
-    pub sender: String,
-    pub receiver: String,
-    pub amount: f64,
+#[serde(untagged)]
+pub enum TransactionData {
+    TransferData {
+        sender: String,
+        receiver: String,
+        amount: f64,
+    },
 }
-
-#[derive(Clone, Deserialize, Serialize, Debug)]
-pub enum TransactionData {}

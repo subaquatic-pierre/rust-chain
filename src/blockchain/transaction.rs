@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use std::ops::{Deref, DerefMut};
 
-use super::data::TransferData;
+use super::data::TransactionData;
 use super::hasher::Hasher;
 
 #[derive(Clone, Deserialize, Serialize, Debug)]
@@ -9,14 +9,14 @@ pub struct Transaction {
     pub hash: String,
     pub tx_type: TransactionType,
     pub status: TransactionStatus,
-    pub data: TransferData,
+    pub data: TransactionData,
 }
 
 impl Transaction {
-    pub fn new(data: TransferData, tx_type: TransactionType) -> Self {
+    pub fn new(data: TransactionData, tx_type: TransactionType) -> Self {
         Transaction {
             hash: Hasher::hash_serializable(data.clone()),
-            data: data,
+            data,
             tx_type,
             status: TransactionStatus::Created,
         }

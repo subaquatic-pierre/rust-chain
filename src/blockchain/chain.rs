@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 
 use super::block::Block;
-use super::data::TransferData;
+use super::data::TransactionData;
 use super::hasher::Hasher;
 use super::transaction::{Transaction, TransactionStatus, TransactionType};
 
@@ -66,7 +66,7 @@ impl Chain {
         }
 
         // Create new reward transaction
-        let data = TransferData {
+        let data = TransactionData::TransferData {
             sender: "Root".to_string(),
             receiver: self.miner_address.clone(),
             amount: self.reward,
@@ -164,7 +164,7 @@ impl Chain {
         }
 
         // Create new reward transaction
-        let data = TransferData {
+        let data = TransactionData::TransferData {
             sender: "Root".to_string(),
             receiver: self.miner_address.clone(),
             amount: self.reward,
@@ -193,7 +193,7 @@ impl Chain {
     // ---
 
     pub fn new_transfer_transaction(sender: &str, receiver: &str, amount: f64) -> Transaction {
-        let data = TransferData {
+        let data = TransactionData::TransferData {
             sender: sender.to_string(),
             receiver: receiver.to_string(),
             amount,
