@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 use super::transaction::Transaction;
 use super::utils::timestamp;
 
-#[derive(Clone, Deserialize, Serialize, Debug)]
+#[derive(Clone, Deserialize, Serialize)]
 pub struct BlockHeader {
     pub index: usize,
     pub previous_hash: String,
@@ -12,7 +12,7 @@ pub struct BlockHeader {
     pub nonce: u64,
 }
 
-#[derive(Clone, Deserialize, Serialize, Debug)]
+#[derive(Clone, Deserialize, Serialize)]
 pub struct Block {
     pub header: BlockHeader,
     pub tx_count: usize,

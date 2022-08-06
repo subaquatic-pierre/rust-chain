@@ -1,6 +1,6 @@
 use actix_web::{
     get, post,
-    web::{scope, Data, Json},
+    web::{scope, Data, Json, Path},
     HttpResponse, Scope,
 };
 use serde::{Deserialize, Serialize};
@@ -20,6 +20,7 @@ pub struct CreateTransactionRequest {
     amount: f64,
     transaction_type: TransactionType,
 }
+
 #[derive(Serialize, Deserialize)]
 pub struct CreateTransactionResponse {
     next_index: usize,
@@ -43,16 +44,25 @@ async fn create_transaction(
 
     match transaction.status {
         TransactionStatus::Unconfirmed => HttpResponse::Ok().json(CreateTransactionResponse {
-            next_index: chain.current_transactions().len(),
+            next_index: chain.current_tx().len(),
             transaction,
         }),
         _ => HttpResponse::InternalServerError().body("Error adding transaction to chain"),
     }
 }
+
 #[get("/list-current-transactions")]
 async fn list_current_transactions(app: Data<AppState>) -> HttpResponse {
     let chain = app.chain.lock().unwrap();
-    let transactions = chain.current_transactions();
+    let transactions = chain.current_tx();
+
+    HttpResponse::Ok().json(transactions)
+}
+
+#[get("/{tx_hash}")]
+async fn get_transaction(info: Path<String>, app: Data<AppState>) -> HttpResponse {
+    let chain = app.chain.lock().unwrap();
+    let transactions = chain.current_tx();
 
     HttpResponse::Ok().json(transactions)
 }
@@ -61,4 +71,5 @@ pub fn register_transaction_service() -> Scope {
     scope("transaction")
         .service(create_transaction)
         .service(list_current_transactions)
+        .service(get_transaction)
 }

@@ -1,17 +1,17 @@
 use serde::{Deserialize, Serialize};
 
 use super::block::Block;
-use super::data::TransactionData;
 use super::hasher::Hasher;
+use super::models::TransactionData;
 use super::transaction::{Transaction, TransactionStatus, TransactionType};
 
-#[derive(Clone, Deserialize, Serialize, Debug)]
+#[derive(Clone, Deserialize, Serialize)]
 pub struct Chain {
     difficulty: usize,
     reward: f64,
     miner_address: String,
     blocks: Vec<Block>,
-    current_transactions: Vec<Transaction>,
+    current_tx: Vec<Transaction>,
 }
 
 impl Chain {
@@ -21,7 +21,7 @@ impl Chain {
             reward,
             miner_address: miner_addr.to_string(),
             blocks: Vec::new(),
-            current_transactions: Vec::new(),
+            current_tx: Vec::new(),
         };
 
         // Mine genesis block
@@ -37,8 +37,8 @@ impl Chain {
         &self.blocks
     }
 
-    pub fn current_transactions(&self) -> &Vec<Transaction> {
-        &self.current_transactions
+    pub fn current_tx(&self) -> &Vec<Transaction> {
+        &self.current_tx
     }
 
     // ---
@@ -46,6 +46,9 @@ impl Chain {
     // ---
 
     pub fn mine_new_block(&mut self) -> &Block {
+        if self.current_tx.len() == 0 {
+            return self.blocks.last().unwrap();
+        }
         // Get previous block info
         let last_block = self.blocks.last().unwrap();
         let last_nonce = last_block.header.nonce;
@@ -61,8 +64,8 @@ impl Chain {
         let mut transactions: Vec<Transaction> = Vec::new();
 
         // Remove all current transactions from blocks, add new new transaction vec for new block
-        while self.current_transactions.len() > 0 {
-            transactions.push(self.current_transactions.pop().unwrap())
+        while self.current_tx.len() > 0 {
+            transactions.push(self.current_tx.pop().unwrap())
         }
 
         // Create new reward transaction
@@ -93,7 +96,7 @@ impl Chain {
 
     pub fn add_transaction<'a>(&mut self, transaction: &'a mut Transaction) -> &'a Transaction {
         transaction.status = TransactionStatus::Unconfirmed;
-        self.current_transactions.push(transaction.clone());
+        self.current_tx.push(transaction.clone());
         transaction
     }
 
@@ -159,8 +162,8 @@ impl Chain {
         let mut transactions: Vec<Transaction> = Vec::new();
 
         // Remove all current transactions from blocks, add new new transaction vec for new block
-        while self.current_transactions.len() > 0 {
-            transactions.push(self.current_transactions.pop().unwrap())
+        while self.current_tx.len() > 0 {
+            transactions.push(self.current_tx.pop().unwrap())
         }
 
         // Create new reward transaction
@@ -219,13 +222,13 @@ mod tests {
     //     chain.add_transaction(&mut transaction_1);
 
     //     assert_eq!(transaction_1.status, TransactionStatus::Unconfirmed);
-    //     assert_eq!(chain.current_transactions().len(), 1);
+    //     assert_eq!(chain.current_tx().len(), 1);
 
     //     let mut transaction_2 = Transaction::new("me", "you", 1.0, TransactionType::Transfer);
 
     //     chain.add_transaction(&mut transaction_2);
 
     //     assert_eq!(transaction_2.status, TransactionStatus::Unconfirmed);
-    //     assert_eq!(chain.current_transactions().len(), 2);
+    //     assert_eq!(chain.current_tx().len(), 2);
     // }
 }
