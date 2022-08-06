@@ -1,7 +1,27 @@
 use serde::{Deserialize, Serialize};
 use std::ops::{Deref, DerefMut};
 
-use super::{data::TransferData, hasher::Hasher};
+use super::data::TransferData;
+use super::hasher::Hasher;
+
+#[derive(Clone, Deserialize, Serialize, Debug)]
+pub struct Transaction {
+    pub hash: String,
+    pub tx_type: TransactionType,
+    pub status: TransactionStatus,
+    pub data: TransferData,
+}
+
+impl Transaction {
+    pub fn new(data: TransferData, tx_type: TransactionType) -> Self {
+        Transaction {
+            hash: Hasher::hash_serializable(data.clone()),
+            data: data,
+            tx_type,
+            status: TransactionStatus::Created,
+        }
+    }
+}
 
 #[derive(Clone, Deserialize, Serialize, Debug, PartialEq)]
 pub enum TransactionStatus {
@@ -28,28 +48,6 @@ pub enum TransactionType {
     Transfer,
     Reward,
     GenesisReward,
-}
-
-#[derive(Clone, Deserialize, Serialize, Debug)]
-pub struct Transaction<T> {
-    pub hash: String,
-    pub tx_type: TransactionType,
-    pub status: TransactionStatus,
-    pub data: T,
-}
-
-impl<T> Transaction<T> {
-    pub fn new(data: T, tx_type: TransactionType) -> Self
-    where
-        T: Serialize,
-    {
-        Transaction {
-            hash: Hasher::hash_serializable(data),
-            data: data,
-            tx_type,
-            status: TransactionStatus::Created,
-        }
-    }
 }
 
 #[cfg(test)]

@@ -2,7 +2,7 @@ use hex_fmt::HexFmt;
 use serde::Serialize;
 use sha2::{Digest, Sha256};
 
-use super::transaction::Transaction;
+use super::{data::TransferData, transaction::Transaction};
 
 pub struct Hasher {}
 
@@ -21,10 +21,7 @@ impl Hasher {
         format!("{}", HexFmt(result))
     }
 
-    pub fn merkle_root<T>(transactions: &[Transaction<T>]) -> String
-    where
-        T: Serialize,
-    {
+    pub fn merkle_root(transactions: &[Transaction]) -> String {
         match transactions.len() {
             1 => Hasher::hash_serializable(format!(
                 "{}{}",

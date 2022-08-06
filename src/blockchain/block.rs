@@ -13,17 +13,17 @@ pub struct BlockHeader {
 }
 
 #[derive(Clone, Deserialize, Serialize, Debug)]
-pub struct Block<T> {
+pub struct Block {
     pub header: BlockHeader,
     pub tx_count: usize,
-    pub data: Vec<Transaction<T>>,
+    pub tx: Vec<Transaction>,
 }
 
-impl<T> Block<T> {
+impl Block {
     pub fn new(
         index: usize,
         nonce: u64,
-        transactions: Vec<Transaction<T>>,
+        transactions: Vec<Transaction>,
         merkle_root: &str,
         previous_hash: &str,
     ) -> Self {
@@ -38,7 +38,7 @@ impl<T> Block<T> {
         Block {
             header,
             tx_count: transactions.len(),
-            data: transactions,
+            tx: transactions,
         }
     }
 }

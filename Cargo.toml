@@ -14,6 +14,7 @@ bincode = "1.0"
 dotenv = "0.15.0"
 futures = "0.3"
 mongodb = { version = "2.2.0", futures = ["async-std-runtime"] }
+env_logger = "0.9.0"
 
 # [dependencies.mongodb]
 # version = "2.2.0"

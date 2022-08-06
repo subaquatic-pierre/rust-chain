@@ -11,15 +11,15 @@ use crate::{app::AppState, blockchain::block::Block};
 
 #[post("/mine-new-block")]
 async fn mine_new_block(app: Data<AppState>) -> HttpResponse {
-    let mut blockchain = app.blockchain.lock().unwrap();
-    let block = blockchain.mine_new_block();
+    let mut chain = app.chain.lock().unwrap();
+    let block = chain.mine_new_block();
     HttpResponse::Ok().json(block)
 }
 
 #[get("/list-blocks")]
 async fn list_blocks(app: Data<AppState>) -> HttpResponse {
-    let blockchain = app.blockchain.lock().unwrap();
-    let blocks = blockchain.blocks();
+    let chain = app.chain.lock().unwrap();
+    let blocks = chain.blocks();
     HttpResponse::Ok().json(blocks)
 }
 

@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 use crate::{
     app::AppState,
     blockchain::{
-        blockchain::Chain,
+        chain::Chain,
         transaction::{Transaction, TransactionStatus, TransactionType},
     },
 };
@@ -21,12 +21,9 @@ pub struct CreateTransactionRequest {
     transaction_type: TransactionType,
 }
 #[derive(Serialize, Deserialize)]
-pub struct CreateTransactionResponse<T>
-where
-    T: Serialize,
-{
+pub struct CreateTransactionResponse {
     next_index: usize,
-    transaction: Transaction<T>,
+    transaction: Transaction,
 }
 
 #[post("/create-transaction")]
@@ -40,22 +37,22 @@ async fn create_transaction(
         new_transaction.amount,
     );
 
-    let mut blockchain = app.blockchain.lock().unwrap();
+    let mut chain = app.chain.lock().unwrap();
 
-    blockchain.add_transaction(&mut transaction);
+    chain.add_transaction(&mut transaction);
 
     match transaction.status {
         TransactionStatus::Unconfirmed => HttpResponse::Ok().json(CreateTransactionResponse {
-            next_index: blockchain.current_transactions().len(),
+            next_index: chain.current_transactions().len(),
             transaction,
         }),
-        _ => HttpResponse::InternalServerError().body("Error adding transaction to blockchain"),
+        _ => HttpResponse::InternalServerError().body("Error adding transaction to chain"),
     }
 }
 #[get("/list-current-transactions")]
 async fn list_current_transactions(app: Data<AppState>) -> HttpResponse {
-    let blockchain = app.blockchain.lock().unwrap();
-    let transactions = blockchain.current_transactions();
+    let chain = app.chain.lock().unwrap();
+    let transactions = chain.current_transactions();
 
     HttpResponse::Ok().json(transactions)
 }
