@@ -1,0 +1,44 @@
+mod api;
+mod blockchain;
+mod db;
+
+use blockchain::blockchain::Chain;
+use blockchain::hasher::Hasher;
+use blockchain::transaction::Transaction;
+
+// use crate::routes::main_routes;
+
+const DIFFICULTY_LEVEL: usize = 3;
+
+pub fn main() {
+    let mut blockchain = Chain::new();
+
+    let transaction = Transaction::new("me", "you", 3);
+    println!("{transaction:#?}");
+
+    blockchain.add_transaction(transaction.clone());
+    blockchain.add_transaction(transaction.clone());
+
+    let reward_transaction = Transaction::new("0", "minder_node", 1);
+
+    blockchain.add_transaction(reward_transaction);
+
+    let last_block = blockchain.last_block();
+    let nonce = blockchain.mine_block(last_block);
+
+    let previous_hash = Hasher::hash_block(last_block.clone());
+    blockchain.new_block(nonce, &previous_hash);
+
+    blockchain.add_transaction(transaction.clone());
+    let reward_transaction = Transaction::new("0", "minder_node", 1);
+    blockchain.add_transaction(reward_transaction);
+
+    let last_block = blockchain.last_block();
+    let nonce = blockchain.mine_block(last_block);
+
+    let previous_hash = Hasher::hash_block(last_block.clone());
+    blockchain.new_block(nonce, &previous_hash);
+
+    // println!("{block:#?}")
+    println!("{:#?}", blockchain.blocks());
+}
