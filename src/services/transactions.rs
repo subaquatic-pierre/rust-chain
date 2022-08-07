@@ -60,11 +60,15 @@ async fn list_current_transactions(app: Data<AppState>) -> HttpResponse {
 }
 
 #[get("/{tx_hash}")]
-async fn get_transaction(info: Path<String>, app: Data<AppState>) -> HttpResponse {
+async fn get_transaction(tx_hash: Path<String>, app: Data<AppState>) -> HttpResponse {
     let chain = app.chain.lock().unwrap();
-    let transactions = chain.current_tx();
 
-    HttpResponse::Ok().json(transactions)
+    let tx = chain.get_transaction(&tx_hash.to_string());
+
+    match tx {
+        Some(tx) => HttpResponse::Ok().json(tx),
+        None => HttpResponse::NotFound().json("Not found"),
+    }
 }
 
 pub fn register_transaction_service() -> Scope {

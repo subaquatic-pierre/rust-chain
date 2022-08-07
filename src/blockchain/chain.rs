@@ -100,6 +100,30 @@ impl Chain {
         transaction
     }
 
+    pub fn get_transaction(&self, tx_hash: &str) -> Option<Transaction> {
+        let tx: Option<Transaction> = None;
+
+        // Find tx in current transactions
+        for curr_tx in &self.current_tx {
+            if curr_tx.hash == tx_hash {
+                return Some(curr_tx.clone());
+            }
+        }
+
+        // Not found in current transaction, search blocks
+        for block in self.blocks() {
+            match block.tx.get(tx_hash) {
+                Some(tx) => return Some(tx.clone()),
+                None => continue,
+            };
+        }
+        tx
+    }
+
+    // ---
+    // Setter methods
+    // ---
+
     pub fn set_difficulty(&mut self, difficulty: usize) {
         self.difficulty = difficulty
     }

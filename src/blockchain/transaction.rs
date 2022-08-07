@@ -17,8 +17,7 @@ pub struct Transaction {
 impl Transaction {
     pub fn new(data: TransactionData, tx_type: TransactionType) -> Self {
         let timestamp = timestamp();
-        let pre_hash_data = format!("timestamp:{timestamp}|{}", data.clone());
-        println!("{pre_hash_data}");
+        let pre_hash_data = format!("timestamp:{timestamp}|{}", &data);
         let hash = Hasher::hash_serializable(pre_hash_data);
         Transaction {
             hash,

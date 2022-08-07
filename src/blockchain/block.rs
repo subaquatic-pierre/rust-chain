@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use serde::{Deserialize, Serialize};
 
 use super::transaction::Transaction;
@@ -16,7 +18,7 @@ pub struct BlockHeader {
 pub struct Block {
     pub header: BlockHeader,
     pub tx_count: usize,
-    pub tx: Vec<Transaction>,
+    pub tx: HashMap<String, Transaction>,
 }
 
 impl Block {
@@ -35,10 +37,15 @@ impl Block {
             timestamp: timestamp(),
         };
 
+        let mut tx = HashMap::new();
+        for trans in &transactions {
+            tx.insert(trans.hash.clone(), trans.clone());
+        }
+
         Block {
             header,
             tx_count: transactions.len(),
-            tx: transactions,
+            tx: tx,
         }
     }
 }
