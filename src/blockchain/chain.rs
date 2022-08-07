@@ -41,7 +41,7 @@ impl Chain {
             return self.blocks.last().unwrap();
         }
         // Get previous block info
-        let last_block = self.blocks.last().unwrap();
+        let last_block = self.blocks().last().unwrap();
         let last_nonce = last_block.header.nonce;
         let previous_hash = last_block.header.merkle_root.clone();
 
@@ -70,9 +70,8 @@ impl Chain {
         // Add reward tx to block tx vec
         transactions.push(reward_tx);
 
-        for tx in &mut transactions {
-            *tx.status = TransactionStatus::Confirmed
-        }
+        // Change all transaction status to confirmed
+        let transactions = Chain::confirm_transactions(transactions);
 
         // Get new merkle_root root of transactions in block
         let merkle_root = Hasher::merkle_root(&transactions);
@@ -235,20 +234,93 @@ impl Chain {
         let tx = Transaction::new(tx_data, tx_type, timestamp);
         tx
     }
+
+    pub fn confirm_transactions(mut transactions: Vec<Transaction>) -> Vec<Transaction> {
+        for tx in &mut transactions {
+            *tx.status = TransactionStatus::Confirmed
+        }
+        transactions
+    }
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::blockchain::chain::tests::test_utils::get_config;
+    use test_utils::get_config;
 
     use super::*;
-    use test_utils::new_tx_data;
+    use test_utils::{new_tx, new_tx_data};
+
+    #[test]
+    fn mine_block() {
+        let config = get_config();
+        let mut chain = Chain::new(config, "test_miner");
+
+        assert_eq!(chain.blocks().len(), 1);
+        chain.mine_new_block();
+        assert_eq!(chain.blocks().len(), 1);
+
+        for _ in 0..5 {
+            chain
+                .add_transaction(&mut new_tx(), "sender", "signature")
+                .unwrap();
+        }
+
+        chain.mine_new_block();
+
+        let new_block = chain.blocks().last().unwrap();
+
+        let mut reward_tx = new_tx();
+        let mut reward_count = 0;
+        for (_hash, tx) in new_block.tx.iter() {
+            if tx.tx_type == TransactionType::Reward {
+                reward_count += 1;
+                reward_tx = tx.clone();
+            }
+        }
+
+        assert_eq!(reward_count, 1);
+        assert_eq!(reward_tx.status, TransactionStatus::Confirmed);
+
+        match reward_tx.tx_data {
+            TransactionData::TransferData { amount, .. } => {
+                assert_eq!(amount, chain.reward())
+            }
+            _ => (),
+        }
+    }
+
+    #[test]
+    fn genesis_block() {
+        let config = get_config();
+        let chain = Chain::new(config, "test_miner");
+
+        for (_hash, tx) in chain.blocks().last().unwrap().tx.iter() {
+            assert_eq!(tx.tx_type, TransactionType::GenesisReward);
+        }
+        assert_eq!(chain.blocks().len(), 1);
+        assert_eq!(chain.blocks().last().unwrap().tx_count, 1);
+    }
+
+    #[test]
+    fn confirm_transactions() {
+        let mut txs: Vec<Transaction> = Vec::new();
+
+        for _ in 0..5 {
+            txs.push(new_tx());
+        }
+
+        let confirmed_txs = Chain::confirm_transactions(txs);
+
+        for tx in confirmed_txs {
+            assert_eq!(tx.status, TransactionStatus::Confirmed);
+        }
+    }
 
     #[test]
     fn add_transaction() {
         let config = get_config();
         let mut chain = Chain::new(config, "test_miner");
-        let tx_data = new_tx_data(12.1, 1);
+        let tx_data = new_tx_data(12.1);
         let mut tx1 = Chain::new_transaction(tx_data, TransactionType::Transfer);
 
         chain
@@ -258,7 +330,7 @@ mod tests {
         assert_eq!(tx1.status, TransactionStatus::Unconfirmed);
         assert_eq!(chain.current_tx().len(), 1);
 
-        let tx_data = new_tx_data(11.1, 2);
+        let tx_data = new_tx_data(11.1);
         let mut tx2 = Chain::new_transaction(tx_data, TransactionType::Transfer);
 
         chain
@@ -269,10 +341,84 @@ mod tests {
         assert_eq!(chain.current_tx().len(), 2);
     }
 
-    mod test_utils {
-        use crate::blockchain::{config::ChainConfig, models::TransactionData};
+    #[test]
+    fn get_transaction() {
+        let config = get_config();
+        let mut chain = Chain::new(config, "test_miner");
+        let tx_data = new_tx_data(12.1);
+        let mut tx = Chain::new_transaction(tx_data, TransactionType::Transfer);
 
-        pub fn new_tx_data(amount: f64, timestamp: u64) -> TransactionData {
+        chain
+            .add_transaction(&mut tx, "sender", "signature")
+            .unwrap();
+
+        let tx_from_chain = chain.get_transaction(&tx.hash).unwrap();
+
+        assert_eq!(tx.hash, tx_from_chain.hash);
+
+        let not_found = chain.get_transaction("not found");
+        match not_found {
+            None => (),
+            _ => panic!("Should not be found"),
+        }
+    }
+    #[test]
+    #[should_panic]
+    fn get_transaction_not_found() {
+        let config = get_config();
+        let chain = Chain::new(config, "test_miner");
+
+        chain.get_transaction("not found").unwrap();
+    }
+
+    #[test]
+    fn new_chain() {
+        let config = get_config();
+        let chain = Chain::new(config, "test_miner");
+
+        assert_eq!(chain.miner_address, "test_miner");
+        assert_eq!(chain.difficulty(), 0);
+        assert_eq!(chain.reward(), 12.1);
+    }
+
+    #[test]
+    fn set_difficulty() {
+        let config = get_config();
+        let mut chain = Chain::new(config, "test_miner");
+
+        chain.set_difficulty(1);
+
+        assert_eq!(chain.difficulty(), 1);
+    }
+
+    #[test]
+    fn get_blocks() {
+        let config = get_config();
+        let chain = Chain::new(config, "test_miner");
+
+        let blocks = chain.blocks();
+
+        assert_ne!(blocks.len(), 0);
+    }
+
+    #[test]
+    fn set_reward() {
+        let config = get_config();
+        let mut chain = Chain::new(config, "test_miner");
+
+        chain.set_reward(24.2);
+
+        assert_eq!(chain.reward() as f64, 24.2);
+    }
+
+    mod test_utils {
+        use crate::blockchain::{
+            config::ChainConfig,
+            models::TransactionData,
+            transaction::{Transaction, TransactionType},
+        };
+
+        pub fn new_tx_data(amount: f64) -> TransactionData {
             let tx_data = TransactionData::TransferData {
                 sender: "me".to_string(),
                 receiver: "you".to_string(),
@@ -286,6 +432,16 @@ mod tests {
                 difficulty: 0,
                 reward: 12.1,
             }
+        }
+
+        pub fn new_tx() -> Transaction {
+            let tx_data = TransactionData::TransferData {
+                sender: "me".to_string(),
+                receiver: "you".to_string(),
+                amount: 22.4,
+            };
+            let tx = Transaction::new(tx_data, TransactionType::Transfer, 1);
+            tx
         }
     }
 }

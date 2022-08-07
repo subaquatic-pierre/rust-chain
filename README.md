@@ -12,5 +12,5 @@
 ### Run in development mode
 
 ```sh
-cargo watch -x 'run --bin blockchain'
+cargo watch -x 'run --bin rust_chain'
 ```
