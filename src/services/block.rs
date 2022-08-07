@@ -1,13 +1,10 @@
-use actix_web::web;
-
 use actix_web::{
     get, post,
-    web::{scope, Data, Json},
+    web::{scope, Data},
     HttpResponse, Scope,
 };
-use serde::{Deserialize, Serialize};
 
-use crate::{app::AppState, blockchain::block::Block};
+use crate::app::AppState;
 
 #[post("/mine-new-block")]
 async fn mine_new_block(app: Data<AppState>) -> HttpResponse {

@@ -9,7 +9,8 @@ use crate::{
     app::AppState,
     blockchain::{
         chain::Chain,
-        transaction::{Transaction, TransactionStatus, TransactionType},
+        models::TransactionData,
+        transaction::{Transaction, TransactionType},
     },
 };
 
@@ -18,7 +19,8 @@ pub struct CreateTransactionRequest {
     sender: String,
     receiver: String,
     amount: f64,
-    transaction_type: TransactionType,
+    signature: String,
+    tx_type: TransactionType,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -30,24 +32,24 @@ pub struct CreateTransactionResponse {
 #[post("/create-transaction")]
 async fn create_transaction(
     app: Data<AppState>,
-    new_transaction: Json<CreateTransactionRequest>,
+    new_tx: Json<CreateTransactionRequest>,
 ) -> HttpResponse {
-    let mut transaction = Chain::new_transfer_transaction(
-        &new_transaction.sender,
-        &new_transaction.receiver,
-        new_transaction.amount,
-    );
+    let tx_data = TransactionData::TransferData {
+        sender: new_tx.sender.clone(),
+        receiver: new_tx.receiver.clone(),
+        amount: new_tx.amount,
+    };
+    let mut transaction = Chain::new_transaction(tx_data, new_tx.tx_type);
 
     let mut chain = app.chain.lock().unwrap();
 
-    chain.add_transaction(&mut transaction);
-
-    match transaction.status {
-        TransactionStatus::Unconfirmed => HttpResponse::Ok().json(CreateTransactionResponse {
+    // Return http error if transaction not verifiable
+    match chain.add_transaction(&mut transaction, &new_tx.sender, &new_tx.signature) {
+        Ok(tx) => HttpResponse::Ok().json(CreateTransactionResponse {
             next_index: chain.current_tx().len(),
-            transaction,
+            transaction: tx.clone(),
         }),
-        _ => HttpResponse::InternalServerError().body("Error adding transaction to chain"),
+        Err(_) => HttpResponse::Forbidden().json("Transaction not verified"),
     }
 }
 

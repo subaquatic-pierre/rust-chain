@@ -4,6 +4,7 @@ use super::block::Block;
 use super::hasher::Hasher;
 use super::models::TransactionData;
 use super::transaction::{Transaction, TransactionStatus, TransactionType};
+use super::utils::timestamp;
 
 #[derive(Clone, Deserialize, Serialize)]
 pub struct Chain {
@@ -16,29 +17,20 @@ pub struct Chain {
 
 impl Chain {
     pub fn new(difficulty: usize, miner_addr: &str, reward: f64) -> Self {
+        let blocks = Chain::get_blocks();
         let mut chain = Chain {
             difficulty,
             reward,
+            blocks,
             miner_address: miner_addr.to_string(),
-            blocks: Vec::new(),
             current_tx: Vec::new(),
         };
 
-        // Mine genesis block
-        chain.genesis_block();
+        // TODO: REMOVE FROM CODEBASE IN PRODUCTION
+        if chain.blocks.len() == 0 {
+            chain.genesis_block()
+        };
         chain
-    }
-
-    // ---
-    // Accessor methods
-    // ---
-
-    pub fn blocks(&self) -> &Vec<Block> {
-        &self.blocks
-    }
-
-    pub fn current_tx(&self) -> &Vec<Transaction> {
-        &self.current_tx
     }
 
     // ---
@@ -60,27 +52,27 @@ impl Chain {
         // Get new block info
         let index = self.blocks.len();
 
-        // Create empty transaction array for new block
+        // Create empty tx array for new block
         let mut transactions: Vec<Transaction> = Vec::new();
 
-        // Remove all current transactions from blocks, add new new transaction vec for new block
+        // Remove all current transactions from blocks, add new new tx vec for new block
         while self.current_tx.len() > 0 {
             transactions.push(self.current_tx.pop().unwrap())
         }
 
-        // Create new reward transaction
+        // Create new reward tx
         let data = TransactionData::TransferData {
             sender: "Root".to_string(),
             receiver: self.miner_address.clone(),
             amount: self.reward,
         };
-        let reward_transaction = Transaction::new(data, TransactionType::Reward);
+        let reward_tx = Chain::new_transaction(data, TransactionType::Reward);
 
-        // Add reward transaction to block transaction vec
-        transactions.push(reward_transaction);
+        // Add reward tx to block tx vec
+        transactions.push(reward_tx);
 
-        for transaction in &mut transactions {
-            *transaction.status = TransactionStatus::Confirmed
+        for tx in &mut transactions {
+            *tx.status = TransactionStatus::Confirmed
         }
 
         // Get new merkle_root root of transactions in block
@@ -94,10 +86,21 @@ impl Chain {
         self.blocks.last().unwrap()
     }
 
-    pub fn add_transaction<'a>(&mut self, transaction: &'a mut Transaction) -> &'a Transaction {
-        transaction.status = TransactionStatus::Unconfirmed;
-        self.current_tx.push(transaction.clone());
-        transaction
+    pub fn add_transaction<'a>(
+        &mut self,
+        tx: &'a mut Transaction,
+        sender: &str,
+        signature: &str,
+    ) -> Result<&'a Transaction, ()> {
+        // Verify transaction before adding to current tx vec
+        match tx.verify(sender, signature) {
+            true => {
+                tx.status = TransactionStatus::Unconfirmed;
+                self.current_tx.push(tx.clone());
+                Ok(tx)
+            }
+            _ => Err(()),
+        }
     }
 
     pub fn get_transaction(&self, tx_hash: &str) -> Option<Transaction> {
@@ -110,7 +113,7 @@ impl Chain {
             }
         }
 
-        // Not found in current transaction, search blocks
+        // Not found in current tx, search blocks
         for block in self.blocks() {
             match block.tx.get(tx_hash) {
                 Some(tx) => return Some(tx.clone()),
@@ -118,6 +121,18 @@ impl Chain {
             };
         }
         tx
+    }
+
+    // ---
+    // Accessor methods
+    // ---
+
+    pub fn blocks(&self) -> &Vec<Block> {
+        &self.blocks
+    }
+
+    pub fn current_tx(&self) -> &Vec<Transaction> {
+        &self.current_tx
     }
 
     // ---
@@ -167,42 +182,39 @@ impl Chain {
         last_chars == difficulty_string
     }
 
+    fn get_blocks() -> Vec<Block> {
+        // TODO: GET BLOCKS FROM STORAGE
+        Vec::new()
+    }
+
     fn genesis_block(&mut self) {
-        // Get previous block info
-        let last_nonce = 0;
+        // Build block info
+        let nonce = 1;
+        let index = 0;
         let previous_hash = [0; 64]
             .iter()
             .map(ToString::to_string)
             .collect::<String>()
             .to_string();
 
-        // Run proof of work algorithm
-        let nonce = self.proof_of_work(last_nonce);
-
-        // Get new block info
-        let index = self.blocks.len();
-
-        // Create empty transaction array for new block
+        // Create empty tx array for new block
         let mut transactions: Vec<Transaction> = Vec::new();
 
-        // Remove all current transactions from blocks, add new new transaction vec for new block
-        while self.current_tx.len() > 0 {
-            transactions.push(self.current_tx.pop().unwrap())
-        }
-
-        // Create new reward transaction
+        // Create new reward tx
         let data = TransactionData::TransferData {
             sender: "Root".to_string(),
             receiver: self.miner_address.clone(),
             amount: self.reward,
         };
-        let reward_transaction = Transaction::new(data, TransactionType::GenesisReward);
 
-        // Add reward transaction to block transaction vec
-        transactions.push(reward_transaction);
+        let reward_tx = Chain::new_transaction(data, TransactionType::GenesisReward);
 
-        for transaction in &mut transactions {
-            *transaction.status = TransactionStatus::Confirmed
+        // Add reward tx to block tx vec
+        transactions.push(reward_tx);
+
+        // Update all tx status to confirmed
+        for tx in &mut transactions {
+            *tx.status = TransactionStatus::Confirmed
         }
 
         // Get new merkle_root root of transactions in block
@@ -219,23 +231,21 @@ impl Chain {
     // Static methods
     // ---
 
-    pub fn new_transfer_transaction(sender: &str, receiver: &str, amount: f64) -> Transaction {
-        let data = TransactionData::TransferData {
-            sender: sender.to_string(),
-            receiver: receiver.to_string(),
-            amount,
-        };
-        let transaction = Transaction::new(data, TransactionType::Transfer);
-        transaction
+    pub fn new_transaction(tx_data: TransactionData, tx_type: TransactionType) -> Transaction {
+        let timestamp = timestamp();
+        let hash = Hasher::hash_serializable(format!("timestamp:{timestamp}|{}", &tx_data));
+
+        let tx = Transaction::new(tx_data, tx_type, &hash, timestamp);
+        tx
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::blockchain::transaction::TransactionType;
-    use crate::{DIFFICULTY_LEVEL, MINER_ADDRESS, REWARD};
+    // use crate::blockchain::transaction::TransactionType;
+    // use crate::{DIFFICULTY_LEVEL, MINER_ADDRESS, REWARD};
 
-    use super::*;
+    // use super::*;
 
     // #[test]
     // fn add_transaction() {

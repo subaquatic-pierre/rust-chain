@@ -1,31 +1,36 @@
 use serde::{Deserialize, Serialize};
 use std::ops::{Deref, DerefMut};
 
-use super::hasher::Hasher;
 use super::models::TransactionData;
-use super::utils::timestamp;
 
 #[derive(Clone, Deserialize, Serialize)]
 pub struct Transaction {
     pub hash: String,
     pub timestamp: u64,
-    pub tx_type: TransactionType,
     pub status: TransactionStatus,
-    pub data: TransactionData,
+    pub tx_type: TransactionType,
+    pub tx_data: TransactionData,
 }
 
 impl Transaction {
-    pub fn new(data: TransactionData, tx_type: TransactionType) -> Self {
-        let timestamp = timestamp();
-        let pre_hash_data = format!("timestamp:{timestamp}|{}", &data);
-        let hash = Hasher::hash_serializable(pre_hash_data);
+    pub fn new(
+        tx_data: TransactionData,
+        tx_type: TransactionType,
+        hash: &str,
+        timestamp: u64,
+    ) -> Self {
         Transaction {
-            hash,
+            hash: hash.to_string(),
             timestamp,
-            data,
+            tx_data,
             tx_type,
             status: TransactionStatus::Created,
         }
+    }
+
+    pub fn verify(&self, _sender: &str, _signature: &str) -> bool {
+        // TODO: VERIFY SIGNATURE AGAINST tx_data
+        true
     }
 }
 
@@ -49,7 +54,7 @@ impl DerefMut for TransactionStatus {
     }
 }
 
-#[derive(Clone, Deserialize, Serialize, Debug, PartialEq)]
+#[derive(Clone, Deserialize, Serialize, Debug, PartialEq, Copy)]
 pub enum TransactionType {
     Transfer,
     Reward,
@@ -58,7 +63,7 @@ pub enum TransactionType {
 
 #[cfg(test)]
 mod test {
-    use super::*;
+    // use super::*;
     // #[test]
     // fn new_transaction() {
     //     let transaction = Transaction::new();
