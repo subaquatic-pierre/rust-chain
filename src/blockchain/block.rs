@@ -49,3 +49,36 @@ impl Block {
         }
     }
 }
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn block_header() {
+        let header = BlockHeader {
+            index: 1,
+            nonce: 2,
+            previous_hash: "prev_hash".to_string(),
+            merkle_root: "merkle_root".to_string(),
+            timestamp: 3,
+        };
+
+        assert_eq!(header.index, 1);
+        assert_eq!(header.nonce, 2);
+        assert_eq!(header.previous_hash, "prev_hash");
+        assert_eq!(header.merkle_root, "merkle_root");
+        assert_eq!(header.timestamp, 3);
+    }
+
+    #[test]
+    fn new_block() {
+        let block = Block::new(1, 2, Vec::new(), "merkle", "prev_hash");
+
+        assert_eq!(block.header.index, 1);
+        assert_eq!(block.header.nonce, 2);
+        assert_eq!(block.tx.len(), 0);
+        assert_eq!(block.header.merkle_root, "merkle");
+        assert_eq!(block.header.previous_hash, "prev_hash");
+    }
+}

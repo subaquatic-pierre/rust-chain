@@ -6,3 +6,15 @@ pub fn timestamp() -> u64 {
         .unwrap()
         .as_secs()
 }
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn test_timestamp() {
+        let ts = timestamp();
+
+        assert_eq!(format!("{ts}").chars().count(), 10);
+    }
+}

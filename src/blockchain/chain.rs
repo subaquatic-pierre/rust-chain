@@ -233,9 +233,7 @@ impl Chain {
 
     pub fn new_transaction(tx_data: TransactionData, tx_type: TransactionType) -> Transaction {
         let timestamp = timestamp();
-        let hash = Hasher::hash_serializable(format!("timestamp:{timestamp}|{}", &tx_data));
-
-        let tx = Transaction::new(tx_data, tx_type, &hash, timestamp);
+        let tx = Transaction::new(tx_data, tx_type, timestamp);
         tx
     }
 }

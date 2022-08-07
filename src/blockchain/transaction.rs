@@ -1,9 +1,10 @@
 use serde::{Deserialize, Serialize};
 use std::ops::{Deref, DerefMut};
 
+use super::hasher::Hasher;
 use super::models::TransactionData;
 
-#[derive(Clone, Deserialize, Serialize)]
+#[derive(Clone, Deserialize, Serialize, Debug)]
 pub struct Transaction {
     pub hash: String,
     pub timestamp: u64,
@@ -13,12 +14,9 @@ pub struct Transaction {
 }
 
 impl Transaction {
-    pub fn new(
-        tx_data: TransactionData,
-        tx_type: TransactionType,
-        hash: &str,
-        timestamp: u64,
-    ) -> Self {
+    pub fn new(tx_data: TransactionData, tx_type: TransactionType, timestamp: u64) -> Self {
+        let hash = Hasher::hash_serializable(format!("timestamp:{timestamp}|{}", &tx_data));
+
         Transaction {
             hash: hash.to_string(),
             timestamp,
@@ -63,15 +61,47 @@ pub enum TransactionType {
 
 #[cfg(test)]
 mod test {
-    // use super::*;
-    // #[test]
-    // fn new_transaction() {
-    //     let transaction = Transaction::new();
+    use super::*;
+    use test_utils::new_tx;
 
-    //     assert_eq!(transaction.sender, "me");
-    //     assert_eq!(transaction.receiver, "you");
-    //     assert_eq!(transaction.amount, 1.0);
-    //     assert_eq!(transaction.tx_type, TransactionType::Transfer);
-    //     assert_eq!(transaction.status, TransactionStatus::Created);
-    // }
+    #[test]
+    fn new_transfer_transaction() {
+        let tx = new_tx();
+
+        match tx.tx_data {
+            TransactionData::TransferData {
+                sender,
+                receiver,
+                amount,
+            } => {
+                assert!(sender == "me");
+                assert!(receiver == "you");
+                assert!(amount == 10.0);
+            }
+            _ => (),
+        }
+        assert_eq!(tx.tx_type, TransactionType::Transfer);
+        assert_eq!(tx.status, TransactionStatus::Created);
+    }
+
+    #[test]
+    fn verify_transaction() {
+        let tx = new_tx();
+
+        assert_eq!(tx.verify("me", "signature"), true);
+    }
+
+    mod test_utils {
+        use super::*;
+
+        pub fn new_tx() -> Transaction {
+            let tx_data = TransactionData::TransferData {
+                sender: "me".to_string(),
+                receiver: "you".to_string(),
+                amount: 10.0,
+            };
+            let tx = Transaction::new(tx_data, TransactionType::Transfer, 1);
+            tx
+        }
+    }
 }
