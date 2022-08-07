@@ -281,21 +281,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "blockchain"
-version = "0.1.0"
-dependencies = [
- "actix-web",
- "bincode",
- "dotenv",
- "env_logger",
- "futures",
- "hex_fmt",
- "mongodb",
- "serde",
- "sha2",
-]
-
-[[package]]
 name = "brotli"
 version = "3.3.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1246,6 +1231,21 @@ dependencies = [
  "untrusted",
  "web-sys",
  "winapi",
+]
+
+[[package]]
+name = "rust_chain"
+version = "0.1.0"
+dependencies = [
+ "actix-web",
+ "bincode",
+ "dotenv",
+ "env_logger",
+ "futures",
+ "hex_fmt",
+ "mongodb",
+ "serde",
+ "sha2",
 ]
 
 [[package]]

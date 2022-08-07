@@ -4,31 +4,16 @@ use env_logger;
 
 use std::io;
 
-mod app;
-mod blockchain;
-mod services;
-mod storage;
+use rust_chain::app::new_app_state;
+use rust_chain::services::block::register_block_service;
+use rust_chain::services::chain::register_chain_service;
+use rust_chain::services::transactions::register_transaction_service;
 
-use app::new_app_state;
-use blockchain::chain::Chain;
-
-use services::block::register_block_service;
-use services::chain::register_chain_service;
-use services::transactions::register_transaction_service;
-
-use storage::Storage;
-
-const DIFFICULTY_LEVEL: usize = 3;
-const MINER_ADDRESS: &str = "Nebula Miner";
-const REWARD: f64 = 10.0;
 const SERVER_HOST: (&str, u16) = ("127.0.0.1", 7878);
 
 #[actix_web::main]
 async fn main() -> io::Result<()> {
-    let blockchain = Chain::new(DIFFICULTY_LEVEL, MINER_ADDRESS, REWARD);
-    let storage = Storage {};
-
-    let app_state = new_app_state(blockchain, storage);
+    let app_state = new_app_state();
 
     std::env::set_var("RUST_LOG", "actix_web=info");
     env_logger::init();

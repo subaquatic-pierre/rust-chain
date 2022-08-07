@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 
 use super::block::Block;
+use super::config::ChainConfig;
 use super::hasher::Hasher;
 use super::models::TransactionData;
 use super::transaction::{Transaction, TransactionStatus, TransactionType};
@@ -8,19 +9,17 @@ use super::utils::timestamp;
 
 #[derive(Clone, Deserialize, Serialize)]
 pub struct Chain {
-    difficulty: usize,
-    reward: f64,
+    config: ChainConfig,
     miner_address: String,
     blocks: Vec<Block>,
     current_tx: Vec<Transaction>,
 }
 
 impl Chain {
-    pub fn new(difficulty: usize, miner_addr: &str, reward: f64) -> Self {
+    pub fn new(config: ChainConfig, miner_addr: &str) -> Self {
         let blocks = Chain::get_blocks();
         let mut chain = Chain {
-            difficulty,
-            reward,
+            config,
             blocks,
             miner_address: miner_addr.to_string(),
             current_tx: Vec::new(),
@@ -64,7 +63,7 @@ impl Chain {
         let data = TransactionData::TransferData {
             sender: "Root".to_string(),
             receiver: self.miner_address.clone(),
-            amount: self.reward,
+            amount: self.reward(),
         };
         let reward_tx = Chain::new_transaction(data, TransactionType::Reward);
 
@@ -140,18 +139,18 @@ impl Chain {
     // ---
 
     pub fn set_difficulty(&mut self, difficulty: usize) {
-        self.difficulty = difficulty
+        self.config.difficulty = difficulty
     }
 
     pub fn set_reward(&mut self, reward: f64) {
-        self.reward = reward
+        self.config.reward = reward
     }
 
     pub fn reward(&self) -> f64 {
-        self.reward
+        self.config.reward
     }
     pub fn difficulty(&self) -> usize {
-        self.difficulty
+        self.config.difficulty
     }
 
     // ---
@@ -171,11 +170,11 @@ impl Chain {
         let guess = format!("{last_nonce:}{nonce:}");
         let hashed_guess = Hasher::hash_serializable(guess);
 
-        let last_chars = &hashed_guess[hashed_guess.len() - self.difficulty..];
+        let last_chars = &hashed_guess[hashed_guess.len() - self.difficulty()..];
 
         let mut difficulty_string = String::new();
 
-        for _ in 0..self.difficulty {
+        for _ in 0..self.difficulty() {
             difficulty_string.push_str("0");
         }
 
@@ -204,7 +203,7 @@ impl Chain {
         let data = TransactionData::TransferData {
             sender: "Root".to_string(),
             receiver: self.miner_address.clone(),
-            amount: self.reward,
+            amount: self.reward(),
         };
 
         let reward_tx = Chain::new_transaction(data, TransactionType::GenesisReward);
@@ -240,27 +239,53 @@ impl Chain {
 
 #[cfg(test)]
 mod tests {
-    // use crate::blockchain::transaction::TransactionType;
-    // use crate::{DIFFICULTY_LEVEL, MINER_ADDRESS, REWARD};
+    use crate::blockchain::chain::tests::test_utils::get_config;
 
-    // use super::*;
+    use super::*;
+    use test_utils::new_tx_data;
 
-    // #[test]
-    // fn add_transaction() {
-    //     let mut chain = Chain::new(DIFFICULTY_LEVEL, MINER_ADDRESS, REWARD);
+    #[test]
+    fn add_transaction() {
+        let config = get_config();
+        let mut chain = Chain::new(config, "test_miner");
+        let tx_data = new_tx_data(12.1, 1);
+        let mut tx1 = Chain::new_transaction(tx_data, TransactionType::Transfer);
 
-    //     let mut transaction_1 = Transaction::new("me", "you", 1.0, TransactionType::Transfer);
+        chain
+            .add_transaction(&mut tx1, "sender", "signature")
+            .unwrap();
 
-    //     chain.add_transaction(&mut transaction_1);
+        assert_eq!(tx1.status, TransactionStatus::Unconfirmed);
+        assert_eq!(chain.current_tx().len(), 1);
 
-    //     assert_eq!(transaction_1.status, TransactionStatus::Unconfirmed);
-    //     assert_eq!(chain.current_tx().len(), 1);
+        let tx_data = new_tx_data(11.1, 2);
+        let mut tx2 = Chain::new_transaction(tx_data, TransactionType::Transfer);
 
-    //     let mut transaction_2 = Transaction::new("me", "you", 1.0, TransactionType::Transfer);
+        chain
+            .add_transaction(&mut tx2, "sender", "signature")
+            .unwrap();
 
-    //     chain.add_transaction(&mut transaction_2);
+        assert_eq!(tx2.status, TransactionStatus::Unconfirmed);
+        assert_eq!(chain.current_tx().len(), 2);
+    }
 
-    //     assert_eq!(transaction_2.status, TransactionStatus::Unconfirmed);
-    //     assert_eq!(chain.current_tx().len(), 2);
-    // }
+    mod test_utils {
+        use crate::blockchain::{config::ChainConfig, models::TransactionData};
+
+        pub fn new_tx_data(amount: f64, timestamp: u64) -> TransactionData {
+            let tx_data = TransactionData::TransferData {
+                sender: "me".to_string(),
+                receiver: "you".to_string(),
+                amount,
+            };
+            tx_data
+        }
+
+        pub fn get_config() -> ChainConfig {
+            ChainConfig {
+                difficulty: 0,
+                reward: 12.1,
+            }
+        }
+    }
 }
