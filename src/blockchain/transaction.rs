@@ -1,12 +1,12 @@
 use serde::{Deserialize, Serialize};
 use std::ops::{Deref, DerefMut};
 
-use super::hasher::Hasher;
+use super::hasher::Hash;
 use super::models::TransactionData;
 
-#[derive(Clone, Deserialize, Serialize, Debug)]
+#[derive(Clone, Serialize, Debug)]
 pub struct Transaction {
-    pub hash: String,
+    pub hash: Hash,
     pub timestamp: u64,
     pub status: TransactionStatus,
     pub tx_type: TransactionType,
@@ -14,11 +14,14 @@ pub struct Transaction {
 }
 
 impl Transaction {
-    pub fn new(tx_data: TransactionData, tx_type: TransactionType, timestamp: u64) -> Self {
-        let hash = Hasher::hash_serializable(format!("timestamp:{timestamp}|{}", &tx_data));
-
+    pub fn new(
+        tx_data: TransactionData,
+        tx_type: TransactionType,
+        timestamp: u64,
+        hash: Hash,
+    ) -> Self {
         Transaction {
-            hash: hash.to_string(),
+            hash,
             timestamp,
             tx_data,
             tx_type,
@@ -42,7 +45,7 @@ pub enum TransactionStatus {
 impl Deref for TransactionStatus {
     type Target = TransactionStatus;
     fn deref(&self) -> &Self::Target {
-        &self
+        self
     }
 }
 
@@ -68,18 +71,30 @@ mod test {
     fn new_transfer_transaction() {
         let tx = new_tx();
 
-        match tx.tx_data {
-            TransactionData::TransferData {
-                sender,
-                receiver,
-                amount,
-            } => {
-                assert!(sender == "me");
-                assert!(receiver == "you");
-                assert!(amount == 10.0);
-            }
-            _ => (),
+        // match tx.tx_data {
+        //     TransactionData::TransferData {
+        //         sender,
+        //         receiver,
+        //         amount,
+        //     } => {
+        //         assert!(sender == "me");
+        //         assert!(receiver == "you");
+        //         assert!(amount == 10.0);
+        //     }
+        //     _ => (),
+        // }
+
+        if let TransactionData::TransferData {
+            sender,
+            receiver,
+            amount,
+        } = tx.tx_data
+        {
+            assert!(sender == "me");
+            assert!(receiver == "you");
+            assert!(amount == 10.0);
         }
+
         assert_eq!(tx.tx_type, TransactionType::Transfer);
         assert_eq!(tx.status, TransactionStatus::Created);
     }
@@ -88,11 +103,15 @@ mod test {
     fn verify_transaction() {
         let tx = new_tx();
 
-        assert_eq!(tx.verify("me", "signature"), true);
+        assert!(tx.verify("me", "signature"));
     }
 
     mod test_utils {
         use super::*;
+        use crate::blockchain::{
+            hasher::{Hash, Hasher},
+            utils::timestamp,
+        };
 
         pub fn new_tx() -> Transaction {
             let tx_data = TransactionData::TransferData {
@@ -100,8 +119,10 @@ mod test {
                 receiver: "you".to_string(),
                 amount: 10.0,
             };
-            let tx = Transaction::new(tx_data, TransactionType::Transfer, 1);
-            tx
+            let timestamp = timestamp();
+            let mut hash_buf = Hash::new();
+            let hash = Hasher::hash_tx_data(&tx_data, timestamp, &mut hash_buf);
+            Transaction::new(tx_data, TransactionType::Transfer, 1, hash.to_owned())
         }
     }
 }

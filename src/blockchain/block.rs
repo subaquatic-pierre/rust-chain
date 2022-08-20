@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use super::transaction::Transaction;
 use super::utils::timestamp;
 
-#[derive(Clone, Deserialize, Serialize)]
+#[derive(Clone, Serialize)]
 pub struct BlockHeader {
     pub index: usize,
     pub previous_hash: String,
@@ -14,18 +14,18 @@ pub struct BlockHeader {
     pub nonce: u64,
 }
 
-#[derive(Clone, Deserialize, Serialize)]
+#[derive(Clone, Serialize)]
 pub struct Block {
     pub header: BlockHeader,
     pub tx_count: usize,
-    pub tx: HashMap<String, Transaction>,
+    pub txs: Vec<Transaction>,
 }
 
 impl Block {
     pub fn new(
         index: usize,
         nonce: u64,
-        transactions: Vec<Transaction>,
+        new_txs: Vec<Transaction>,
         merkle_root: &str,
         previous_hash: &str,
     ) -> Self {
@@ -37,15 +37,16 @@ impl Block {
             timestamp: timestamp(),
         };
 
-        let mut tx = HashMap::new();
-        for trans in &transactions {
-            tx.insert(trans.hash.clone(), trans.clone());
+        let mut txs = Vec::new();
+
+        for tx in new_txs {
+            txs.push(tx);
         }
 
         Block {
             header,
-            tx_count: transactions.len(),
-            tx: tx,
+            tx_count: txs.len(),
+            txs,
         }
     }
 }
@@ -77,7 +78,7 @@ mod test {
 
         assert_eq!(block.header.index, 1);
         assert_eq!(block.header.nonce, 2);
-        assert_eq!(block.tx.len(), 0);
+        assert!(block.txs.is_empty());
         assert_eq!(block.header.merkle_root, "merkle");
         assert_eq!(block.header.previous_hash, "prev_hash");
     }

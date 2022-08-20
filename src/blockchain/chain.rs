@@ -1,13 +1,15 @@
+use hex_fmt::HexFmt;
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 
 use super::block::Block;
 use super::config::ChainConfig;
-use super::hasher::Hasher;
+use super::hasher::{Hash, Hasher};
 use super::models::TransactionData;
 use super::transaction::{Transaction, TransactionStatus, TransactionType};
 use super::utils::timestamp;
 
-#[derive(Clone, Deserialize, Serialize)]
+#[derive(Clone, Serialize)]
 pub struct Chain {
     config: ChainConfig,
     miner_address: String,
@@ -26,7 +28,7 @@ impl Chain {
         };
 
         // TODO: REMOVE FROM CODEBASE IN PRODUCTION
-        if chain.blocks.len() == 0 {
+        if chain.blocks.is_empty() {
             chain.genesis_block()
         };
         chain
@@ -37,7 +39,7 @@ impl Chain {
     // ---
 
     pub fn mine_new_block(&mut self) -> &Block {
-        if self.current_tx.len() == 0 {
+        if self.current_tx.is_empty() {
             return self.blocks.last().unwrap();
         }
         // Get previous block info
@@ -55,7 +57,7 @@ impl Chain {
         let mut transactions: Vec<Transaction> = Vec::new();
 
         // Remove all current transactions from blocks, add new new tx vec for new block
-        while self.current_tx.len() > 0 {
+        while !self.current_tx.is_empty() {
             transactions.push(self.current_tx.pop().unwrap())
         }
 
@@ -102,23 +104,24 @@ impl Chain {
     }
 
     pub fn get_transaction(&self, tx_hash: &str) -> Option<Transaction> {
-        let tx: Option<Transaction> = None;
-
         // Find tx in current transactions
         for curr_tx in &self.current_tx {
-            if curr_tx.hash == tx_hash {
+            if curr_tx.hash.to_string() == tx_hash {
                 return Some(curr_tx.clone());
             }
         }
 
-        // Not found in current tx, search blocks
+        // Find tx in blocks
         for block in self.blocks() {
-            match block.tx.get(tx_hash) {
-                Some(tx) => return Some(tx.clone()),
-                None => continue,
-            };
+            for tx in &block.txs {
+                if tx.hash.to_string() == tx_hash {
+                    return Some(tx.clone());
+                }
+            }
         }
-        tx
+
+        // No tx found
+        return None;
     }
 
     // ---
@@ -167,14 +170,31 @@ impl Chain {
 
     fn valid_proof(&self, last_nonce: u64, nonce: u64) -> bool {
         let guess = format!("{last_nonce:}{nonce:}");
-        let hashed_guess = Hasher::hash_serializable(guess);
+
+        // let mut hash_buf = [0u8; 4];
+        // let _hashed_guess = Hasher::hash_serializable(&guess, &mut hash_buf);
+
+        let hashed_guess = {
+            let bytes = bincode::serialize(&guess).unwrap();
+            // create a Sha256 object
+            let mut hasher = Sha256::new();
+
+            // write input message
+            hasher.update(bytes);
+
+            // read hash digest and consume hasher
+            let result = hasher.finalize();
+
+            let str_hash = format!("{}", HexFmt(result));
+            str_hash
+        };
 
         let last_chars = &hashed_guess[hashed_guess.len() - self.difficulty()..];
 
         let mut difficulty_string = String::new();
 
         for _ in 0..self.difficulty() {
-            difficulty_string.push_str("0");
+            difficulty_string.push('0');
         }
 
         last_chars == difficulty_string
@@ -189,11 +209,7 @@ impl Chain {
         // Build block info
         let nonce = 1;
         let index = 0;
-        let previous_hash = [0; 64]
-            .iter()
-            .map(ToString::to_string)
-            .collect::<String>()
-            .to_string();
+        let previous_hash = [0; 64].iter().map(ToString::to_string).collect::<String>();
 
         // Create empty tx array for new block
         let mut transactions: Vec<Transaction> = Vec::new();
@@ -231,8 +247,9 @@ impl Chain {
 
     pub fn new_transaction(tx_data: TransactionData, tx_type: TransactionType) -> Transaction {
         let timestamp = timestamp();
-        let tx = Transaction::new(tx_data, tx_type, timestamp);
-        tx
+        let mut hash_buf = Hash::new();
+        let hash = Hasher::hash_tx_data(&tx_data, timestamp, &mut hash_buf);
+        Transaction::new(tx_data, tx_type, timestamp, hash.to_owned())
     }
 
     pub fn confirm_transactions(mut transactions: Vec<Transaction>) -> Vec<Transaction> {
@@ -271,7 +288,7 @@ mod tests {
 
         let mut reward_tx = new_tx();
         let mut reward_count = 0;
-        for (_hash, tx) in new_block.tx.iter() {
+        for tx in new_block.txs.iter() {
             if tx.tx_type == TransactionType::Reward {
                 reward_count += 1;
                 reward_tx = tx.clone();
@@ -281,11 +298,16 @@ mod tests {
         assert_eq!(reward_count, 1);
         assert_eq!(reward_tx.status, TransactionStatus::Confirmed);
 
-        match reward_tx.tx_data {
-            TransactionData::TransferData { amount, .. } => {
-                assert_eq!(amount, chain.reward())
-            }
-            _ => (),
+        // match reward_tx.tx_data {
+        //     TransactionData::TransferData { amount, .. } => {
+        //         assert_eq!(amount, chain.reward())
+        //     }
+        //     _ => (),
+        // }
+
+        // Ensure amount is same as chain set reward amount
+        if let TransactionData::TransferData { amount, .. } = reward_tx.tx_data {
+            assert_eq!(amount, chain.reward())
         }
     }
 
@@ -294,7 +316,7 @@ mod tests {
         let config = get_config();
         let chain = Chain::new(config, "test_miner");
 
-        for (_hash, tx) in chain.blocks().last().unwrap().tx.iter() {
+        for tx in chain.blocks().last().unwrap().txs.iter() {
             assert_eq!(tx.tx_type, TransactionType::GenesisReward);
         }
         assert_eq!(chain.blocks().len(), 1);
@@ -352,9 +374,9 @@ mod tests {
             .add_transaction(&mut tx, "sender", "signature")
             .unwrap();
 
-        let tx_from_chain = chain.get_transaction(&tx.hash).unwrap();
+        let tx_from_chain = chain.get_transaction(&tx.hash.to_string()).unwrap();
 
-        assert_eq!(tx.hash, tx_from_chain.hash);
+        assert_eq!(tx.hash.to_string(), tx_from_chain.hash.to_string());
 
         let not_found = chain.get_transaction("not found");
         match not_found {
@@ -414,17 +436,18 @@ mod tests {
     mod test_utils {
         use crate::blockchain::{
             config::ChainConfig,
+            hasher::{Hash, Hasher},
             models::TransactionData,
             transaction::{Transaction, TransactionType},
+            utils::timestamp,
         };
 
         pub fn new_tx_data(amount: f64) -> TransactionData {
-            let tx_data = TransactionData::TransferData {
+            TransactionData::TransferData {
                 sender: "me".to_string(),
                 receiver: "you".to_string(),
                 amount,
-            };
-            tx_data
+            }
         }
 
         pub fn get_config() -> ChainConfig {
@@ -440,8 +463,10 @@ mod tests {
                 receiver: "you".to_string(),
                 amount: 22.4,
             };
-            let tx = Transaction::new(tx_data, TransactionType::Transfer, 1);
-            tx
+            let timestamp = timestamp();
+            let mut hash_buf = Hash::new();
+            let hash = Hasher::hash_tx_data(&tx_data, timestamp, &mut hash_buf);
+            Transaction::new(tx_data, TransactionType::Transfer, 1, hash.to_owned())
         }
     }
 }

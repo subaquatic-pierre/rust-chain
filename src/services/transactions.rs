@@ -23,7 +23,7 @@ pub struct CreateTransactionRequest {
     tx_type: TransactionType,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize)]
 pub struct CreateTransactionResponse {
     next_index: usize,
     transaction: Transaction,
