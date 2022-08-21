@@ -108,10 +108,7 @@ mod test {
 
     mod test_utils {
         use super::*;
-        use crate::blockchain::{
-            hasher::{Hash, Hasher},
-            utils::timestamp,
-        };
+        use crate::blockchain::{hasher::Hasher, utils::timestamp};
 
         pub fn new_tx() -> Transaction {
             let tx_data = TransactionData::TransferData {
@@ -120,9 +117,8 @@ mod test {
                 amount: 10.0,
             };
             let timestamp = timestamp();
-            let mut hash_buf = Hash::new();
-            let hash = Hasher::hash_tx_data(&tx_data, timestamp, &mut hash_buf);
-            Transaction::new(tx_data, TransactionType::Transfer, 1, hash.to_owned())
+            let hash = Hasher::hash_tx_data(&tx_data, timestamp);
+            Transaction::new(tx_data, TransactionType::Transfer, 1, hash)
         }
     }
 }

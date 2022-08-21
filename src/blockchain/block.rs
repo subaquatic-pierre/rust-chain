@@ -1,15 +1,14 @@
-use std::collections::HashMap;
+use serde::Serialize;
 
-use serde::{Deserialize, Serialize};
-
+use super::hasher::Hash;
 use super::transaction::Transaction;
 use super::utils::timestamp;
 
 #[derive(Clone, Serialize)]
 pub struct BlockHeader {
     pub index: usize,
-    pub previous_hash: String,
-    pub merkle_root: String,
+    pub previous_hash: Hash,
+    pub merkle_root: Hash,
     pub timestamp: u64,
     pub nonce: u64,
 }
@@ -26,14 +25,14 @@ impl Block {
         index: usize,
         nonce: u64,
         new_txs: Vec<Transaction>,
-        merkle_root: &str,
-        previous_hash: &str,
+        merkle_root: Hash,
+        previous_hash: Hash,
     ) -> Self {
         let header = BlockHeader {
             index,
             nonce,
-            previous_hash: previous_hash.to_string(),
-            merkle_root: merkle_root.to_string(),
+            previous_hash,
+            merkle_root,
             timestamp: timestamp(),
         };
 
@@ -53,6 +52,8 @@ impl Block {
 
 #[cfg(test)]
 mod test {
+    use crate::blockchain::hasher::Hash;
+
     use super::*;
 
     #[test]
@@ -60,26 +61,22 @@ mod test {
         let header = BlockHeader {
             index: 1,
             nonce: 2,
-            previous_hash: "prev_hash".to_string(),
-            merkle_root: "merkle_root".to_string(),
+            previous_hash: Hash::new(),
+            merkle_root: Hash::new(),
             timestamp: 3,
         };
 
         assert_eq!(header.index, 1);
         assert_eq!(header.nonce, 2);
-        assert_eq!(header.previous_hash, "prev_hash");
-        assert_eq!(header.merkle_root, "merkle_root");
         assert_eq!(header.timestamp, 3);
     }
 
     #[test]
     fn new_block() {
-        let block = Block::new(1, 2, Vec::new(), "merkle", "prev_hash");
+        let block = Block::new(1, 2, Vec::new(), Hash::new(), Hash::new());
 
         assert_eq!(block.header.index, 1);
         assert_eq!(block.header.nonce, 2);
         assert!(block.txs.is_empty());
-        assert_eq!(block.header.merkle_root, "merkle");
-        assert_eq!(block.header.previous_hash, "prev_hash");
     }
 }

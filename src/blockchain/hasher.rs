@@ -1,25 +1,44 @@
 use std::fmt;
+use std::str;
 
+use hex;
 use hex_fmt::HexFmt;
 use serde::{Serialize, Serializer};
 use sha2::{Digest, Sha256};
 
+// use super::utils::{as_base64, from_base64};
 use super::{models::TransactionData, transaction::Transaction};
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, PartialOrd)]
 pub struct Hash {
-    bytes: [u8; 64],
+    // HASH::SHA2_256
+    bytes: Vec<u8>,
 }
 
 impl Hash {
     pub fn new() -> Self {
-        Self { bytes: [0u8; 64] }
+        Self { bytes: Vec::new() }
     }
 
-    pub fn write(&mut self, string: &str) {
-        for (i, c) in string.chars().enumerate() {
-            self.bytes[i] = c as u8
+    pub fn as_bytes(&self) -> &Vec<u8> {
+        &self.bytes
+    }
+
+    pub fn from_char_slice(slice: &[char]) -> Self {
+        let mut buf = Vec::new();
+        for &hex_char in slice.iter() {
+            buf.push(hex_char as u8)
         }
+        let bytes = hex::decode(buf).unwrap();
+
+        Self { bytes }
+    }
+
+    pub fn from_hex_str(hex: &str) -> Self {
+        // let mut decoded = [0u8; 32];
+        let bytes = hex::decode(hex).unwrap();
+
+        Self { bytes }
     }
 }
 
@@ -40,15 +59,16 @@ impl Default for Hash {
 
 impl fmt::Display for Hash {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", String::from_utf8_lossy(&self.bytes))
+        write!(f, "{}", hex::encode(self.as_bytes()))
     }
 }
 
 pub struct Hasher {}
 
 impl Hasher {
-    pub fn hash(data: impl Serialize, buf: &mut Hash) -> &mut Hash {
+    pub fn hash(data: impl Serialize) -> Hash {
         let bytes = bincode::serialize(&data).unwrap();
+
         // create a Sha256 object
         let mut hasher = Sha256::new();
 
@@ -58,35 +78,16 @@ impl Hasher {
         // read hash digest and consume hasher
         let result = hasher.finalize();
 
-        let str_hash = format!("{}", HexFmt(result));
-
-        buf.write(&str_hash);
-        buf
+        Hash::from_hex_str(&format!("{}", HexFmt(result)))
     }
 
-    pub fn hash_tx_data<'a>(
-        tx_data: &TransactionData,
-        timestamp: u64,
-        buf: &'a mut Hash,
-    ) -> &'a mut Hash {
+    pub fn hash_tx_data(tx_data: &TransactionData, timestamp: u64) -> Hash {
         let data = format!("timestamp:{timestamp}|{}", tx_data);
-        let bytes = bincode::serialize(&data).unwrap();
-        // create a Sha256 object
-        let mut hasher = Sha256::new();
 
-        // write input message
-        hasher.update(bytes);
-
-        // read hash digest and consume hasher
-        let result = hasher.finalize();
-
-        let str_hash = format!("{}", HexFmt(result));
-
-        buf.write(&str_hash);
-        buf
+        Self::hash(data)
     }
 
-    pub fn merkle_root(txs: &[Transaction]) -> String {
+    pub fn merkle_root(txs: &[Transaction]) -> Hash {
         match txs.len() {
             1 => Hasher::hash_two_txs(&txs[0], &txs[0]),
             2 => Hasher::hash_two_txs(&txs[0], &txs[1]),
@@ -97,20 +98,10 @@ impl Hasher {
     // ---
     // Private methods
     // ---
-    fn hash_two_txs(tx1: &Transaction, tx2: &Transaction) -> String {
+    fn hash_two_txs(tx1: &Transaction, tx2: &Transaction) -> Hash {
         let data = format!("{}{}", tx1.hash, tx2.hash);
 
-        let bytes = bincode::serialize(&data).unwrap();
-        // create a Sha256 object
-        let mut hasher = Sha256::new();
-
-        // write input message
-        hasher.update(bytes);
-
-        // read hash digest and consume hasher
-        let result = hasher.finalize();
-
-        format!("{}", HexFmt(result))
+        Self::hash(data)
     }
 }
 
@@ -119,29 +110,36 @@ mod test {
     use super::*;
     use test_utils::new_tx;
 
-    #[derive(Serialize)]
+    #[derive(Serialize, PartialEq, PartialOrd)]
     struct Data {
         x: i16,
         y: i16,
     }
 
     #[test]
+    fn hash_from_slice() {
+        let hash_slice = Hash::from_char_slice(&['0'; 64]);
+        assert_eq!(
+            format!("{hash_slice}"),
+            "0000000000000000000000000000000000000000000000000000000000000000"
+        );
+    }
+
+    #[test]
+    fn hash_from_hex_str() {
+        let str = "7b11c1133330cd161071bf23a0c9b6ce5320a8f3a0f83620035a72be46df4104";
+        let hash = Hash::from_hex_str(str);
+
+        println!("{:?}", hash.as_bytes())
+    }
+
+    #[test]
     fn hash_serializable() {
         let d1 = Data { x: 1, y: 2 };
-        // // let d2 = Data { x: 1, y: 2 };
-        // let d3 = Data { x: 42, y: 24 };
 
-        let mut buf = Hash::new();
+        let hash = Hasher::hash(d1);
 
-        Hasher::hash(d1, &mut buf);
-
-        println!("{buf}");
-
-        // let d2 = Hasher::hash_serializable(d2);
-        // let d3 = Hasher::hash_serializable(d3);
-
-        // assert_ne!(d1, d3);
-        // assert_eq!(d1, d2);
+        assert!(!hash.as_bytes().is_empty());
     }
 
     #[test]
@@ -176,9 +174,7 @@ mod test {
     mod test_utils {
         use super::*;
         use crate::blockchain::{
-            hasher::{Hash, Hasher},
-            models::TransactionData,
-            transaction::TransactionType,
+            hasher::Hasher, models::TransactionData, transaction::TransactionType,
         };
 
         pub fn new_tx(amount: f64, timestamp: u64) -> Transaction {
@@ -187,14 +183,8 @@ mod test {
                 receiver: "you".to_string(),
                 amount,
             };
-            let mut hash_buf = Hash::new();
-            let hash = Hasher::hash_tx_data(&tx_data, timestamp, &mut hash_buf);
-            Transaction::new(
-                tx_data,
-                TransactionType::Transfer,
-                timestamp,
-                hash.to_owned(),
-            )
+            let hash = Hasher::hash_tx_data(&tx_data, timestamp);
+            Transaction::new(tx_data, TransactionType::Transfer, timestamp, hash)
         }
     }
 }

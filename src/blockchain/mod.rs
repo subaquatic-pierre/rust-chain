@@ -5,3 +5,4 @@ pub mod hasher;
 pub mod models;
 pub mod transaction;
 mod utils;
+pub mod wallet;

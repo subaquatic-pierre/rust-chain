@@ -1,6 +1,4 @@
-use hex_fmt::HexFmt;
-use serde::{Deserialize, Serialize};
-use sha2::{Digest, Sha256};
+use serde::Serialize;
 
 use super::block::Block;
 use super::config::ChainConfig;
@@ -8,6 +6,8 @@ use super::hasher::{Hash, Hasher};
 use super::models::TransactionData;
 use super::transaction::{Transaction, TransactionStatus, TransactionType};
 use super::utils::timestamp;
+
+const CHAIN_DIFFICULTY: usize = 2;
 
 #[derive(Clone, Serialize)]
 pub struct Chain {
@@ -79,7 +79,7 @@ impl Chain {
         let merkle_root = Hasher::merkle_root(&transactions);
 
         // Make new block
-        let block = Block::new(index, nonce, transactions, &merkle_root, &previous_hash);
+        let block = Block::new(index, nonce, transactions, merkle_root, previous_hash);
 
         // Append block to chain
         self.blocks.push(block);
@@ -121,7 +121,7 @@ impl Chain {
         }
 
         // No tx found
-        return None;
+        None
     }
 
     // ---
@@ -171,31 +171,16 @@ impl Chain {
     fn valid_proof(&self, last_nonce: u64, nonce: u64) -> bool {
         let guess = format!("{last_nonce:}{nonce:}");
 
-        // let mut hash_buf = [0u8; 4];
-        // let _hashed_guess = Hasher::hash_serializable(&guess, &mut hash_buf);
+        let hashed_guess = Hasher::hash(guess);
 
-        let hashed_guess = {
-            let bytes = bincode::serialize(&guess).unwrap();
-            // create a Sha256 object
-            let mut hasher = Sha256::new();
+        let last_chars =
+            &hashed_guess.as_bytes()[hashed_guess.as_bytes().len() - CHAIN_DIFFICULTY..];
 
-            // write input message
-            hasher.update(bytes);
+        let difficulty_string = [b'0'; CHAIN_DIFFICULTY];
 
-            // read hash digest and consume hasher
-            let result = hasher.finalize();
-
-            let str_hash = format!("{}", HexFmt(result));
-            str_hash
-        };
-
-        let last_chars = &hashed_guess[hashed_guess.len() - self.difficulty()..];
-
-        let mut difficulty_string = String::new();
-
-        for _ in 0..self.difficulty() {
-            difficulty_string.push('0');
-        }
+        // for (i, c) in "000".chars().enumerate() {
+        //     difficulty_string[i] = c as u8
+        // }
 
         last_chars == difficulty_string
     }
@@ -209,7 +194,7 @@ impl Chain {
         // Build block info
         let nonce = 1;
         let index = 0;
-        let previous_hash = [0; 64].iter().map(ToString::to_string).collect::<String>();
+        let previous_hash = Hash::from_char_slice(&['0'; 64]);
 
         // Create empty tx array for new block
         let mut transactions: Vec<Transaction> = Vec::new();
@@ -235,7 +220,7 @@ impl Chain {
         let merkle_root = Hasher::merkle_root(&transactions);
 
         // Make new block
-        let block = Block::new(index, nonce, transactions, &merkle_root, &previous_hash);
+        let block = Block::new(index, nonce, transactions, merkle_root, previous_hash);
 
         // Append block to blocks
         self.blocks.push(block);
@@ -247,9 +232,8 @@ impl Chain {
 
     pub fn new_transaction(tx_data: TransactionData, tx_type: TransactionType) -> Transaction {
         let timestamp = timestamp();
-        let mut hash_buf = Hash::new();
-        let hash = Hasher::hash_tx_data(&tx_data, timestamp, &mut hash_buf);
-        Transaction::new(tx_data, tx_type, timestamp, hash.to_owned())
+        let hash = Hasher::hash_tx_data(&tx_data, timestamp);
+        Transaction::new(tx_data, tx_type, timestamp, hash)
     }
 
     pub fn confirm_transactions(mut transactions: Vec<Transaction>) -> Vec<Transaction> {
@@ -436,7 +420,7 @@ mod tests {
     mod test_utils {
         use crate::blockchain::{
             config::ChainConfig,
-            hasher::{Hash, Hasher},
+            hasher::Hasher,
             models::TransactionData,
             transaction::{Transaction, TransactionType},
             utils::timestamp,
@@ -464,8 +448,7 @@ mod tests {
                 amount: 22.4,
             };
             let timestamp = timestamp();
-            let mut hash_buf = Hash::new();
-            let hash = Hasher::hash_tx_data(&tx_data, timestamp, &mut hash_buf);
+            let hash = Hasher::hash_tx_data(&tx_data, timestamp);
             Transaction::new(tx_data, TransactionType::Transfer, 1, hash.to_owned())
         }
     }
