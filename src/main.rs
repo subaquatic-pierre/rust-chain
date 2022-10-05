@@ -5,9 +5,9 @@ use env_logger;
 use std::io;
 
 use rust_chain::app::new_app_state;
-use rust_chain::services::block::register_block_service;
-use rust_chain::services::chain::register_chain_service;
-use rust_chain::services::transactions::register_transaction_service;
+use rust_chain::www::block::register_block_service;
+use rust_chain::www::chain::register_chain_service;
+use rust_chain::www::transactions::register_transaction_service;
 
 const SERVER_HOST: (&str, u16) = ("127.0.0.1", 7878);
 

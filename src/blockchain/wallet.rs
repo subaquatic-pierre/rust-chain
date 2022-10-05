@@ -1,36 +1,47 @@
+use std::fmt::Debug;
+use std::fmt::{self, Display};
 use std::io::BufWriter;
-use std::str::FromStr;
 use std::{fs::OpenOptions, io::BufReader};
 
-use rand::thread_rng;
-use secp256k1::hashes::sha256;
-use secp256k1::{generate_keypair, Message};
-use secp256k1::{
-    rand::{rngs, SeedableRng},
-    PublicKey, SecretKey,
-};
-use tiny_keccak::keccak256;
-use web3::types::Address;
+use serde::de::{self, Deserialize, Deserializer, MapAccess, SeqAccess, Visitor};
+use serde::Serialize;
 
-use anyhow::{bail, Result};
-use serde::{Deserialize, Serialize};
+use secp256k1::{generate_keypair, rand::thread_rng, PublicKey, Secp256k1, SecretKey};
+// use web3::types::Address;
 
-#[derive(Serialize, Deserialize)]
+use anyhow::Result;
+
+/// use secp256k1::{SecretKey, Secp256k1, PublicKey};
+///
+/// let secp = Secp256k1::new();
+/// let secret_key = SecretKey::from_slice(&[0xcd; 32]).expect("32 bytes, within curve order");
+/// let public_key = PublicKey::from_secret_key(&secp, &secret_key);
+///
+
+#[derive(Serialize, Debug)]
 pub struct Wallet {
-    public_key: String,
-    private_key: String,
-    address: String,
+    public_key: PublicKey,
+    secret_key: SecretKey,
+}
+
+impl Display for Wallet {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let sec_key_hex = self.secret_key_to_hex();
+        let pub_key_hex = self.public_key_to_hex();
+        let string = format!(
+            "{{\n    public_key: {}\n    secret_key: {}\n}}",
+            pub_key_hex, sec_key_hex
+        );
+        write!(f, "{}", string)
+    }
 }
 
 impl Wallet {
     pub fn new() -> Self {
-        let (private_key, public_key) = Self::generate_keypair();
-        let address = Self::public_key_address(&public_key);
-
+        let (secret_key, public_key) = generate_keypair(&mut thread_rng());
         Self {
-            public_key: public_key.to_string(),
-            private_key: "private_key".to_string(),
-            address: format!("{:?}", address),
+            public_key,
+            secret_key,
         }
     }
 
@@ -40,34 +51,25 @@ impl Wallet {
             .create(true)
             .open(file_path)?;
         let buf_writer = BufWriter::new(file);
+
         serde_json::to_writer_pretty(buf_writer, self)?;
         Ok(())
     }
 
-    pub fn get_secret_key(&self) -> Result<SecretKey> {
-        let secret_key = SecretKey::from_str(&self.private_key)?;
-        Ok(secret_key)
+    pub fn secret_key(&self) -> [u8; 32] {
+        self.secret_key.secret_bytes()
     }
 
-    pub fn get_public_key(&self) -> Result<PublicKey> {
-        let pub_key = PublicKey::from_str(&self.public_key)?;
-        Ok(pub_key)
+    pub fn public_key(&self) -> [u8; 33] {
+        self.public_key.serialize()
     }
 
-    // ---
-    // Accessor methods
-    // ---
-
-    pub fn private_key_str(&self) -> String {
-        self.private_key.clone()
+    pub fn secret_key_to_hex(&self) -> String {
+        hex::encode(&self.secret_key.secret_bytes())
     }
 
-    pub fn public_key_str(&self) -> String {
-        self.public_key.clone()
-    }
-
-    pub fn address_str(&self) -> String {
-        self.address.clone()
+    pub fn public_key_to_hex(&self) -> String {
+        self.public_key.to_string()
     }
 
     // ---
@@ -85,17 +87,117 @@ impl Wallet {
         generate_keypair(&mut thread_rng())
     }
 
-    pub fn public_key_address(public_key: &PublicKey) -> Address {
-        let public_key = public_key.serialize_uncompressed();
-        debug_assert_eq!(public_key[0], 0x04);
-        let hash = keccak256(&public_key[1..]);
-        Address::from_slice(&hash[12..])
+    fn secret_key_from_hex(hex_str: &str) -> SecretKey {
+        let bytes = hex::decode(hex_str).unwrap();
+        SecretKey::from_slice(&bytes).unwrap()
+    }
+
+    fn public_key_from_secret_key(secret_key: &SecretKey) -> PublicKey {
+        let secp = Secp256k1::new();
+        PublicKey::from_secret_key(&secp, secret_key)
     }
 }
 
 impl Default for Wallet {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+impl<'de> Deserialize<'de> for Wallet {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        enum Field {
+            SecretKey,
+            PublicKey,
+        }
+        impl<'de> Deserialize<'de> for Field {
+            fn deserialize<D>(deserializer: D) -> Result<Field, D::Error>
+            where
+                D: Deserializer<'de>,
+            {
+                struct FieldVisitor;
+
+                impl<'de> Visitor<'de> for FieldVisitor {
+                    type Value = Field;
+
+                    fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+                        formatter.write_str("`secret_key` or `public_key`")
+                    }
+
+                    fn visit_str<E>(self, value: &str) -> Result<Field, E>
+                    where
+                        E: de::Error,
+                    {
+                        match value {
+                            "secret_key" => Ok(Field::SecretKey),
+                            "public_key" => Ok(Field::PublicKey),
+                            _ => Err(de::Error::unknown_field(value, FIELDS)),
+                        }
+                    }
+                }
+
+                deserializer.deserialize_identifier(FieldVisitor)
+            }
+        }
+
+        struct DurationVisitor;
+
+        impl<'de> Visitor<'de> for DurationVisitor {
+            type Value = Wallet;
+
+            fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+                formatter.write_str("struct Duration")
+            }
+
+            fn visit_seq<V>(self, mut seq: V) -> Result<Wallet, V::Error>
+            where
+                V: SeqAccess<'de>,
+            {
+                unimplemented!();
+            }
+
+            fn visit_map<V>(self, mut map: V) -> Result<Wallet, V::Error>
+            where
+                V: MapAccess<'de>,
+            {
+                let mut public_key: Option<PublicKey> = None;
+                let mut secret_key: Option<SecretKey> = None;
+
+                let saved_map_val = None;
+                while let Some(key) = map.next_key()? {
+                    match key {
+                        Field::SecretKey => {
+                            if secret_key.is_some() {
+                                return Err(de::Error::duplicate_field("secret_key"));
+                            }
+                            secret_key = Some(Wallet::secret_key_from_hex(map.next_value()?));
+                        }
+                        Field::PublicKey => {
+                            if public_key.is_some() {
+                                return Err(de::Error::duplicate_field("public_key"));
+                            }
+
+                            let s_key = map[key] = Some(map.next_value()?);
+                        }
+                    }
+                }
+                let public_key =
+                    public_key.ok_or_else(|| de::Error::missing_field("public_key"))?;
+                let secret_key =
+                    secret_key.ok_or_else(|| de::Error::missing_field("secret_key"))?;
+
+                Ok(Wallet {
+                    public_key,
+                    secret_key,
+                })
+            }
+        }
+
+        const FIELDS: &'static [&'static str] = &["secs", "nanos"];
+        deserializer.deserialize_struct("Duration", FIELDS, DurationVisitor)
     }
 }
 
@@ -106,28 +208,39 @@ mod test {
     fn create_wallet() {
         let wallet = Wallet::new();
 
-        println!("public_key: {:}", wallet.public_key_str());
-        println!("private_key: {:}", wallet.private_key_str());
-        println!("address: {:}", wallet.address_str());
+        println!("{}", wallet);
+        println!("{:?}", wallet);
     }
 
     #[test]
-    fn save_wallet() {
+    fn wallet_test() {
         let wallet = Wallet::new();
-        println!("public_key: {:}", wallet.public_key_str());
-        println!("private_key: {:}", wallet.private_key_str());
-        println!("address: {:}", wallet.address_str());
 
-        wallet.save_to_file("crypto_wallet.json").unwrap();
+        println!("public_key len: {:?}", wallet.public_key().len());
+        println!("secret_key len: {:?}", wallet.secret_key().len());
+
+        println!("public_key hex len {:?}", wallet.public_key_to_hex().len());
+        println!("secret_key hex len {:?}", wallet.secret_key_to_hex().len());
+        // println!("{:?}", wallet);
     }
 
-    #[test]
-    fn wallet_from_file() {
-        let file_path = "crypto_wallet.json";
-        let wallet = Wallet::from_file(file_path).unwrap();
+    // #[test]
+    // fn save_wallet() {
+    //     let wallet = Wallet::new();
+    //     println!("public_key: {:}", wallet.public_key_str());
+    //     println!("private_key: {:}", wallet.private_key_str());
+    //     println!("address: {:}", wallet.address_str());
 
-        println!("public_key: {:}", wallet.public_key_str());
-        println!("private_key: {:}", wallet.private_key_str());
-        println!("address: {:}", wallet.address_str());
-    }
+    //     wallet.save_to_file("crypto_wallet.json").unwrap();
+    // }
+
+    // #[test]
+    // fn wallet_from_file() {
+    //     let file_path = "crypto_wallet.json";
+    //     let wallet = Wallet::from_file(file_path).unwrap();
+
+    //     println!("public_key: {:}", wallet.public_key_str());
+    //     println!("private_key: {:}", wallet.private_key_str());
+    //     println!("address: {:}", wallet.address_str());
+    // }
 }
