@@ -24,12 +24,10 @@ pub fn new_app_state() -> Data<AppState> {
     let chain = Chain::new(config, MINER_ADDRESS);
     let storage = Storage {};
 
-    let data = Data::new(AppState {
+    Data::new(AppState {
         app_name: String::from("Blockchain App"),
         chain: Mutex::new(chain),
         storage: Mutex::new(storage),
         counter: Mutex::new(0),
-    });
-
-    data
+    })
 }
